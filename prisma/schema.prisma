@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  currency        String   @default("USD")
+  country         String
+  countryCode     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  users           User[]
+  expenses        Expense[]
+  approvalRules   ApprovalRule[]
+
+  @@map("companies")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  image           String?
+  role            String   @default("EMPLOYEE") // ADMIN, MANAGER, EMPLOYEE
+  managerId       String?
+  companyId       String
+  googleId        String?  @unique
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  company         Company  @relation(fields: [companyId], references: [id])
+  manager         User?    @relation("ManagerEmployee", fields: [managerId], references: [id])
+  employees       User[]   @relation("ManagerEmployee")
+  
+  // Expenses
+  expenses        Expense[]
+  approvalSteps   ApprovalStep[]
+
+  @@map("users")
+}
+
+model Expense {
+  id              String        @id @default(cuid())
+  amount          Float
+  currency        String
+  convertedAmount Float?        // Amount in company currency
+  category        String
+  description     String
+  date            DateTime
+  receiptUrl      String?
+  receiptData     String?       // OCR extracted data as JSON string
+  status          String        @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  companyId       String
+  submittedById   String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  company         Company       @relation(fields: [companyId], references: [id])
+  submittedBy     User          @relation(fields: [submittedById], references: [id])
+  approvalFlow    ApprovalFlow?
+  
+  @@map("expenses")
+}
+
+model ApprovalFlow {
+  id              String   @id @default(cuid())
+  expenseId       String   @unique
+  ruleId          String?
+  currentStep     Int      @default(1)
+  isCompleted     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  expense         Expense       @relation(fields: [expenseId], references: [id])
+  rule            ApprovalRule? @relation(fields: [ruleId], references: [id])
+  steps           ApprovalStep[]
+
+  @@map("approval_flows")
+}
+
+model ApprovalStep {
+  id              String         @id @default(cuid())
+  flowId          String
+  stepNumber      Int
+  approverId      String
+  status          String         @default("PENDING") // PENDING, APPROVED, REJECTED
+  comment         String?
+  approvedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  flow            ApprovalFlow   @relation(fields: [flowId], references: [id])
+  approver        User           @relation(fields: [approverId], references: [id])
+
+  @@unique([flowId, stepNumber])
+  @@map("approval_steps")
+}
+
+model ApprovalRule {
+  id              String         @id @default(cuid())
+  name            String
+  companyId       String
+  ruleType        String         // PERCENTAGE, SPECIFIC, HYBRID
+  percentageThreshold Float?     // For PERCENTAGE type
+  specificApproverId String?     // For SPECIFIC type
+  isManagerFirst  Boolean       @default(false)
+  minAmount       Float?        // Optional: only apply if expense >= amount
+  maxAmount       Float?        // Optional: only apply if expense <= amount
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  company         Company        @relation(fields: [companyId], references: [id])
+  approvalFlows   ApprovalFlow[]
+
+  @@map("approval_rules")
+}
+
